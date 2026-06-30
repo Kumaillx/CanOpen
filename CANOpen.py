@@ -78,23 +78,53 @@ def Jump_to_preop():
 
 def flash_device(serial, node_id, device_type):
     """Flashes the captured serial number with its dynamic Node ID."""
-    serial_str = format_serial(serial)
-    url = f"{BASE_URL}/flash/{serial_str}/{node_id}"
-    try:
-        log("ACTION", f"Flashing Serial: {serial_str} ({device_type}) -> Assigning Node ID: {node_id}")
-        # Add delay to let the gateway and hardware stabilize before flash
-        time.sleep(1.5)
-        response = requests.post(url, headers=HEADERS)
-        if response.status_code in [200, 201]:
-            log("SUCCESS", f"Node {node_id} identity stored successfully.")
-            # Add delay to let the device initialize after flashing
+    # We will try both decimal and hex formats to be extremely robust.
+    
+    # 1. Determine the decimal format
+    decimal_serial = None
+    if isinstance(serial, int):
+        decimal_serial = str(serial)
+    elif isinstance(serial, str):
+        if serial.startswith("0x") or serial.startswith("0X"):
+            try:
+                decimal_serial = str(int(serial, 16))
+            except ValueError:
+                pass
+        else:
+            try:
+                decimal_serial = str(int(serial))
+            except ValueError:
+                pass
+                
+    # 2. Determine the hex format
+    hex_serial = format_serial(serial)
+    
+    # Let's try decimal first, then hex
+    formats_to_try = []
+    if decimal_serial:
+        formats_to_try.append((decimal_serial, "decimal"))
+    formats_to_try.append((hex_serial, "hex"))
+    
+    for serial_val, format_type in formats_to_try:
+        url = f"{BASE_URL}/flash/{serial_val}/{node_id}"
+        try:
+            log("ACTION", f"Flashing Serial ({format_type} format): {serial_val} ({device_type}) -> Assigning Node ID: {node_id}")
+            # Add delay to let the gateway and hardware stabilize before flash
             time.sleep(1.5)
-            return True
-        log("FAILED", f"Gateway rejected flash for Serial {serial_str}. HTTP Status: {response.status_code}")
-        return False
-    except Exception as e:
-        log("ERROR", f"Exception during flash sequence for Serial {serial_str}: {e}")
-        return False
+            response = requests.post(url, headers=HEADERS)
+            if response.status_code in [200, 201]:
+                log("SUCCESS", f"Node {node_id} identity stored successfully using {format_type} serial {serial_val}.")
+                # Add delay to let the device initialize after flashing
+                time.sleep(1.5)
+                return True
+            else:
+                log("WARNING", f"Flash attempt failed with {format_type} serial {serial_val}. HTTP Status: {response.status_code}")
+        except Exception as e:
+            log("ERROR", f"Exception during flash with {format_type} serial {serial_val}: {e}")
+            
+    log("FAILED", f"All flash attempts failed for Serial {hex_serial} (tried formats: {[f[1] for f in formats_to_try]}).")
+    return False
+
 
 def start_device(node_id):
     """Sends a POST /start command to boot a configured node into OPERATIONAL state."""
