@@ -147,98 +147,156 @@ def main():
     print("   DYNAMIC LIVE CAN BUS AUTOMATION ENGINE    ")
     print("="*60)
 
-    # 1. Fetch initial live topology mapping from GSShell
-    log("SYSTEM", "Querying /what to find physical hardware footprints...")
-    initial_snapshot = Jump_to_preop()
-    if not initial_snapshot:
-        return
-    # Print out what the network looks like right now
-    print_exact_hardware_states(initial_snapshot)
+    max_retries = 5
+    retry_count = 0
+    case = 0
+    flashed_node_ids = set()
 
-    # Extract the live arrays from the snapshot
-    boot_nodes = initial_snapshot.get("bootNodes", [])
-    canopen_nodes = initial_snapshot.get("canOpenNodes", [])
-
-    if not boot_nodes and not canopen_nodes:
-        log("SYSTEM", "No devices detected on the CAN bus.")
-        return
-
-    # Determine existing node IDs to prevent assignment conflicts
-    existing_node_ids = {node.get("nodeID") for node in canopen_nodes if node.get("nodeID") is not None}
-    current_node_id = 34
-    while current_node_id in existing_node_ids:
-        current_node_id += 2
-
-    # 2. Interactive Flashing and Starting Loop for Bootloader devices
-    if boot_nodes:
-        log("SYSTEM", f"Captured {len(boot_nodes)} unconfigured devices floating on the wire.")
-        for node in boot_nodes:
-            serial_number = node.get("serialNumber")
-            serial_str = format_serial(serial_number)
-            device_type = node.get("type", "Unknown device")
-
-            print(f"\n--- Device {serial_str} ({device_type}) ---")
-            print("Status: Bootloader")
-            user_choice = input(f"Do you want to flash this device to make it operational? (y/n): ").strip().lower()
-            
-            if user_choice in ['yes', 'y']:
-                node_id = current_node_id
-                # Prepare current_node_id for next device
-                current_node_id += 2
-                while current_node_id in existing_node_ids:
+    while True:
+        match case:
+            case 0:
+                log("STATE", "Entering Case 0: Checking for devices...")
+                snapshot = Jump_to_preop()
+                if not snapshot:
+                    log("ERROR", "Failed to retrieve network snapshot, retrying in 2 seconds...")
+                    time.sleep(2)
+                    continue
+                
+                boot_nodes = snapshot.get("bootNodes", [])
+                canopen_nodes = snapshot.get("canOpenNodes", [])
+                
+                # Print exact hardware states so status of every device is always visible
+                print_exact_hardware_states(snapshot)
+                
+                # If no devices at all are detected on the CAN bus
+                if not boot_nodes and not canopen_nodes:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        log("ERROR", f"No devices detected after {max_retries} scanning attempts. Exiting.")
+                        break
+                    log("SYSTEM", f"No devices detected. Retrying scan in 3 seconds (Attempt {retry_count}/{max_retries})...")
+                    time.sleep(3)
+                    continue
+                    
+                # If there are no bootnodes (all are configured/canOpenNodes)
+                if not boot_nodes:
+                    log("SYSTEM", "No devices left in bootmode. Moving to Case 1.")
+                    case = 1
+                    retry_count = 0  # Reset retry counter for Case 1
+                    continue
+                
+                # Process only the first bootmode device to keep the network snapshot fresh
+                node = boot_nodes[0]
+                serial_number = node.get("serialNumber")
+                serial_str = format_serial(serial_number)
+                device_type = node.get("type", "Unknown device")
+                
+                print(f"\n--- Bootmode Device Detected ---")
+                print(f"Status: Bootloader, Serial: {serial_str}, Type: {device_type}")
+                
+                # Calculate next available node ID, tracking flashed IDs locally to prevent conflicts
+                existing_node_ids = {n.get("nodeID") for n in canopen_nodes if n.get("nodeID") is not None}
+                all_assigned_ids = existing_node_ids.union(flashed_node_ids)
+                current_node_id = 34
+                while current_node_id in all_assigned_ids:
                     current_node_id += 2
-
-                # Flash the device to assign Node ID
-                if flash_device(serial_number, node_id, device_type):
-                    # Show genuine state (which is now PREOPERATIONAL)
-                    print(f"Device genuine state: PREOPERATIONAL (Assigned Node ID: {node_id})")
-                    start_choice = input(f"Do you wanna start Node {node_id}? (y/n): ").strip().lower()
-                    if start_choice in ['yes', 'y']:
-                        if start_device(node_id):
-                            print(f"Node {node_id} is now OPERATIONAL.")
-                        else:
-                            print(f"Failed to start Node {node_id}. State remains PREOPERATIONAL.")
-                    else:
-                        print(f"Node {node_id} state remains PREOPERATIONAL.")
+                    
+                log("ACTION", f"Setting device {serial_str} from bootmode to preoperational using flash...")
+                if flash_device(serial_number, current_node_id, device_type):
+                    log("SUCCESS", f"Device {serial_str} successfully transitioned to preoperational state with Node ID: {current_node_id}.")
+                    flashed_node_ids.add(current_node_id)
+                    time.sleep(1.5)
                 else:
-                    print(f"Failed to flash device {serial_str}.")
-            else:
-                print(f"Skipping device {serial_str}. State remains Bootloader.")
-                time.sleep(0.1)
+                    log("ERROR", f"Failed to flash device {serial_str}. Retrying in 2 seconds...")
+                    time.sleep(2)
+                
+                # Loop back immediately to refresh the network state
+                continue
 
-    # 3. Interactive Starting Loop for already configured devices
-    if canopen_nodes:
-        log("SYSTEM", f"Checking {len(canopen_nodes)} configured devices...")
-        for node in canopen_nodes:
-            node_id = node.get("nodeID")
-            state = node.get("state", "UNKNOWN").upper()
-            serial_number = node.get("serialNumber")
-            serial_str = format_serial(serial_number)
-            device_type = node.get("type", "Unknown device")
-
-            print(f"\n--- CANopen Node {node_id} (s/n: {serial_str}, {device_type}) ---")
-            print(f"Genuine state: {state}")
-            
-            if state == "PREOPERATIONAL":
-                start_choice = input(f"Do you wanna start Node {node_id}? (y/n): ").strip().lower()
-                if start_choice in ['yes', 'y']:
+            case 1:
+                log("STATE", "Entering Case 1: Verifying preoperational state & transitioning to operational...")
+                snapshot = Jump_to_preop()
+                if not snapshot:
+                    log("ERROR", "Failed to retrieve network snapshot, retrying in 2 seconds...")
+                    time.sleep(2)
+                    continue
+                
+                # Self-healing: if any devices are in bootmode, revert to Case 0 to flash/retry them
+                boot_nodes = snapshot.get("bootNodes", [])
+                if boot_nodes:
+                    log("WARNING", f"Some devices ({len(boot_nodes)}) are still in bootmode. Reverting to Case 0 to flash them...")
+                    case = 0
+                    time.sleep(2)
+                    continue
+                    
+                canopen_nodes = snapshot.get("canOpenNodes", [])
+                preop_nodes = [n for n in canopen_nodes if n.get("state", "").upper() == "PREOPERATIONAL"]
+                
+                # If there are no preop nodes
+                if not preop_nodes:
+                    non_operational = [n for n in canopen_nodes if n.get("state", "").upper() != "OPERATIONAL"]
+                    if non_operational:
+                        log("WARNING", f"Found non-operational nodes: {non_operational}. Retrying state checks...")
+                        time.sleep(2)
+                        continue
+                    log("SYSTEM", "All devices are already OPERATIONAL. Moving to Case 2.")
+                    case = 2
+                    retry_count = 0
+                    continue
+                
+                # Display status of every device before transitioning
+                log("SYSTEM", "Displaying status before transitioning to operational:")
+                print_exact_hardware_states(snapshot)
+                
+                # Wait 2 seconds before starting transition
+                time.sleep(2)
+                
+                # Transition all preoperational nodes to operational
+                for node in preop_nodes:
+                    node_id = node.get("nodeID")
+                    serial_str = format_serial(node.get("serialNumber"))
+                    device_type = node.get("type", "Unknown device")
+                    log("ACTION", f"Transitioning preoperational Node ID {node_id} (s/n: {serial_str}) to operational...")
                     if start_device(node_id):
-                        print(f"Node {node_id} is now OPERATIONAL.")
+                        log("SUCCESS", f"Node {node_id} is now OPERATIONAL.")
                     else:
-                        print(f"Failed to start Node {node_id}. State remains PREOPERATIONAL.")
-                else:
-                    print(f"Node {node_id} state remains PREOPERATIONAL.")
-            elif state == "OPERATIONAL":
-                print(f"Node {node_id} is already OPERATIONAL. No action needed.")
-            else:
-                print(f"Node {node_id} is in state: {state}. No actions available.")
-            time.sleep(0.1)
+                        log("ERROR", f"Failed to transition Node {node_id} to OPERATIONAL.")
+                
+                # Show updated device status
+                log("SYSTEM", "Showing updated device status after transition:")
+                final_snapshot = Jump_to_preop()
+                print_exact_hardware_states(final_snapshot)
+                
+                case = 2
+                retry_count = 0
+                continue
 
-    # 4. Show final snapshot
-    print("\n" + "="*60)
-    log("SYSTEM", "Querying /what for the final hardware states...")
-    final_snapshot = Jump_to_preop()
-    print_exact_hardware_states(final_snapshot)
+            case 2:
+                log("STATE", "Entering Case 2: Final Verification of network state...")
+                snapshot = Jump_to_preop()
+                if not snapshot:
+                    log("ERROR", "Failed to retrieve network snapshot.")
+                    break
+                    
+                boot_nodes = snapshot.get("bootNodes", [])
+                canopen_nodes = snapshot.get("canOpenNodes", [])
+                
+                # Check for any device in bootmode or not operational
+                not_ready = [n for n in canopen_nodes if n.get("state", "").upper() != "OPERATIONAL"]
+                
+                if not boot_nodes and not not_ready:
+                    print("\n" + "*"*50)
+                    print("            READY FOR PUMPING            ")
+                    print("*"*50 + "\n")
+                    break
+                else:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        log("ERROR", f"Verification failed. {len(boot_nodes)} devices in bootmode, {len(not_ready)} devices not operational. Exiting.")
+                        break
+                    log("WARNING", f"Verification failed. Retrying in 2 seconds (Attempt {retry_count}/{max_retries})...")
+                    time.sleep(2)
+                    continue
 
     print("=" *60)
     print("       Sequence Complete - Hardware done    ")
