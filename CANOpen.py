@@ -592,11 +592,26 @@ def main() -> None:
                         time.sleep(RETRY_DELAY)
                         continue
 
-                    # Show updated status after activation
+                    # Show updated status after activation and check for
+                    # newly-appeared bootloader devices. Some hardware only
+                    # joins the CAN bus after another node has been started
+                    # (sequential boot behaviour). If new boot nodes are found,
+                    # revert to Stage 0 to flash them before verifying.
                     log("SYSTEM", "Updated network status after activation:")
                     try:
                         post_snapshot = get_snapshot()
                         print_network_status(post_snapshot)
+
+                        if post_snapshot.boot_nodes:
+                            log("WARNING",
+                                f"{len(post_snapshot.boot_nodes)} new bootloader "
+                                "device(s) appeared after activation "
+                                "(sequential hardware boot detected). "
+                                "Reverting to Stage 0 to flash them...")
+                            retry_count = 0
+                            case = 0
+                            continue
+
                     except CANOpenError:
                         pass  # non-critical display step
 
