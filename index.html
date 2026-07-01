@@ -2,184 +2,445 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CANopen Debug Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CANopen Commissioning Dashboard</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #121824;
-      color: #e0e6ed;
-      margin: 20px;
+    :root {
+      --bg: #0f172a;
+      --panel: #182235;
+      --panel-2: #0c1322;
+      --line: #27344d;
+      --text: #eef4ff;
+      --muted: #90a2c2;
+      --accent: #29b6f6;
+      --slot: #233149;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
       padding: 0;
+      font-family: "Segoe UI", Arial, sans-serif;
     }
-    h1 {
-      color: #00c8ff;
-      margin-bottom: 5px;
+
+    body {
+      background:
+        radial-gradient(circle at top left, rgba(41, 182, 246, 0.12), transparent 30%),
+        radial-gradient(circle at top right, rgba(46, 204, 113, 0.08), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      padding: 20px;
     }
-    p.subtitle {
-      color: #8da0c4;
-      margin-top: 0;
-      margin-bottom: 20px;
-    }
+
     .container {
-      max-width: 1000px;
+      max-width: 1380px;
       margin: 0 auto;
     }
+
+    h1 {
+      color: var(--accent);
+      font-size: 28px;
+      margin-bottom: 8px;
+      letter-spacing: 0.2px;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+
+    #ready-banner {
+      display: none;
+      background: rgba(46, 204, 113, 0.12);
+      border: 1px solid rgba(46, 204, 113, 0.75);
+      color: #6cf0a0;
+      padding: 12px 16px;
+      border-radius: 12px;
+      text-align: center;
+      margin-bottom: 14px;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+    }
+
+    #ready-banner.visible {
+      display: block;
+    }
+
     .header-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      background-color: #1c2333;
-      padding: 15px;
-      border-radius: 8px;
-      margin-bottom: 20px;
-      border: 1px solid #2d3748;
+      gap: 16px;
+      background: linear-gradient(180deg, rgba(24, 34, 53, 0.98), rgba(17, 27, 44, 0.98));
+      padding: 12px 14px;
+      border-radius: 14px;
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.22);
     }
+
+    .status-pill {
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--muted);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-weight: 600;
+    }
+
     #start-btn {
-      background-color: #00c8ff;
-      color: #121824;
+      background: linear-gradient(135deg, #29b6f6, #65d6ff);
+      color: #04111d;
       border: none;
-      padding: 10px 20px;
-      font-size: 15px;
-      font-weight: bold;
-      border-radius: 4px;
+      padding: 9px 14px;
+      font-size: 14px;
+      font-weight: 800;
+      border-radius: 10px;
       cursor: pointer;
+      box-shadow: 0 10px 22px rgba(41, 182, 246, 0.24);
+      transition: transform 0.18s ease, opacity 0.18s ease;
     }
+
     #start-btn:hover {
-      background-color: #33d6ff;
+      transform: translateY(-1px);
     }
+
     #start-btn:disabled {
-      background-color: #4a5568;
+      background: #4a5568;
       color: #a0aec0;
       cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
     }
+
     .stages {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 20px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
+      margin-bottom: 14px;
     }
+
     .stage {
-      flex: 1;
-      background-color: #1c2333;
-      padding: 12px;
-      border-radius: 6px;
+      background: rgba(24, 34, 53, 0.96);
+      padding: 11px 10px;
+      border-radius: 12px;
       text-align: center;
-      border: 1px solid #2d3748;
-      color: #a0aec0;
-      font-weight: bold;
+      border: 1px solid var(--line);
+      color: #a4b3d3;
+      font-weight: 700;
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
+
     .stage.active {
-      border-color: #00c8ff;
-      color: #00c8ff;
-      background-color: rgba(0, 200, 255, 0.08);
+      border-color: rgba(41, 182, 246, 0.85);
+      color: var(--accent);
+      background: rgba(41, 182, 246, 0.08);
     }
+
     .stage.done {
-      border-color: #00e896;
-      color: #00e896;
-      background-color: rgba(0, 232, 150, 0.08);
+      border-color: rgba(46, 204, 113, 0.85);
+      color: #6cf0a0;
+      background: rgba(46, 204, 113, 0.08);
     }
+
     .grid {
       display: grid;
-      grid-template-columns: 1.2fr 0.8fr;
-      gap: 20px;
+      grid-template-columns: 1.35fr 0.85fr;
+      gap: 14px;
+      align-items: start;
     }
+
     .panel {
-      background-color: #1c2333;
-      border-radius: 8px;
-      border: 1px solid #2d3748;
-      padding: 15px;
+      background: linear-gradient(180deg, rgba(24, 34, 53, 0.98), rgba(15, 23, 42, 0.98));
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      padding: 14px;
       display: flex;
       flex-direction: column;
+      box-shadow: 0 10px 36px rgba(0, 0, 0, 0.18);
     }
+
     .panel h2 {
-      margin-top: 0;
-      font-size: 16px;
-      border-bottom: 1px solid #2d3748;
-      padding-bottom: 10px;
-      color: #8da0c4;
+      margin-bottom: 4px;
+      font-size: 13px;
+      color: #b9c8e5;
       text-transform: uppercase;
-      letter-spacing: 0.5px;
+      letter-spacing: 1px;
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-    }
-    th, td {
-      padding: 10px;
-      text-align: left;
-      border-bottom: 1px solid #2d3748;
-    }
-    th {
-      color: #a0aec0;
+
+    .panel-subtitle {
+      color: var(--muted);
       font-size: 12px;
+      margin-bottom: 12px;
+    }
+
+    .shelves-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .shelf {
+      background: rgba(17, 28, 49, 0.95);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 100%;
+    }
+
+    .shelf-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .shelf-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .progress {
+      background: rgba(41, 182, 246, 0.14);
+      border: 1px solid rgba(41, 182, 246, 0.32);
+      color: #9bdcff;
+      padding: 5px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .devices {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .device {
+      background: var(--slot);
+      border: 1px solid #354766;
+      border-radius: 10px;
+      min-height: 84px;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+      overflow: hidden;
+      position: relative;
+      cursor: pointer;
+    }
+
+    .device:hover {
+      transform: translateY(-2px);
+      border-color: rgba(41, 182, 246, 0.85);
+    }
+
+    .device.empty {
+      background: linear-gradient(180deg, rgba(26, 34, 51, 0.95), rgba(20, 26, 38, 0.95));
+      border-style: dashed;
+      color: #7184a6;
+    }
+
+    .device.assigned.boot {
+      background: linear-gradient(180deg, rgba(255, 190, 61, 0.16), rgba(255, 190, 61, 0.08));
+      border-color: rgba(255, 190, 61, 0.5);
+    }
+
+    .device.assigned.preop {
+      background: linear-gradient(180deg, rgba(41, 182, 246, 0.16), rgba(41, 182, 246, 0.08));
+      border-color: rgba(41, 182, 246, 0.5);
+    }
+
+    .device.assigned.op {
+      background: linear-gradient(180deg, rgba(46, 204, 113, 0.16), rgba(46, 204, 113, 0.08));
+      border-color: rgba(46, 204, 113, 0.5);
+    }
+
+    .device-slot {
+      color: #95a7c5;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.7px;
       text-transform: uppercase;
     }
-    .status-badge {
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: bold;
-      display: inline-block;
+
+    .device-label {
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-top: 4px;
+      color: var(--text);
+      word-break: break-word;
+      min-height: 28px;
     }
-    .status-boot { background-color: rgba(255, 190, 61, 0.15); color: #ffbe3d; }
-    .status-preop { background-color: rgba(0, 200, 255, 0.15); color: #00c8ff; }
-    .status-op { background-color: rgba(0, 232, 150, 0.15); color: #00e896; }
-    .status-unknown { background-color: rgba(255, 255, 255, 0.08); color: #a0aec0; }
-    
+
+    .device-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+      font-size: 10px;
+      color: #c7d4eb;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 6px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.2px;
+    }
+
+    .status-boot {
+      background: rgba(255, 190, 61, 0.15);
+      color: #ffbe3d;
+    }
+
+    .status-preop {
+      background: rgba(41, 182, 246, 0.15);
+      color: #8ddcff;
+    }
+
+    .status-op {
+      background: rgba(46, 204, 113, 0.15);
+      color: #75ef9c;
+    }
+
+    .status-unknown {
+      background: rgba(255, 255, 255, 0.08);
+      color: #a0aec0;
+    }
+
+    .device.empty .device-label {
+      color: #7a89a6;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .slot-select {
+      position: absolute;
+      top: 7px;
+      right: 7px;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: rgba(7, 12, 22, 0.5);
+      color: transparent;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      line-height: 1;
+      font-weight: 900;
+      pointer-events: none;
+      transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+    }
+
+    .device.selected .slot-select {
+      background: rgba(46, 204, 113, 0.16);
+      border-color: rgba(46, 204, 113, 0.85);
+      color: #75ef9c;
+      transform: scale(1.03);
+    }
+
+    .device.selected {
+      box-shadow: inset 0 0 0 1px rgba(46, 204, 113, 0.4);
+    }
+
+    .device.empty.selected {
+      background: linear-gradient(180deg, rgba(46, 204, 113, 0.1), rgba(20, 26, 38, 0.95));
+    }
+
     #log-box {
-      background-color: #0b0f19;
-      border-radius: 4px;
+      background: var(--panel-2);
+      border-radius: 12px;
       padding: 10px;
-      font-family: monospace;
-      font-size: 11.5px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 11px;
       line-height: 1.6;
-      height: 400px;
+      height: 560px;
       overflow-y: auto;
       color: #c5d1e6;
+      border: 1px solid rgba(255, 255, 255, 0.04);
     }
+
     .log-line {
       margin-bottom: 4px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.03);
       padding-bottom: 2px;
     }
-    .log-ts { color: #4a6080; }
-    .log-level { font-weight: bold; }
-    .lvl-state { color: #00c8ff; }
+
+    .log-ts { color: #5c7397; }
+    .log-level { font-weight: 800; }
+    .lvl-state { color: #8ddcff; }
     .lvl-action { color: #60a5fa; }
-    .lvl-success { color: #00e896; }
+    .lvl-success { color: #75ef9c; }
     .lvl-warning { color: #ffbe3d; }
-    .lvl-error, .lvl-critical, .lvl-failed { color: #ff4d6d; }
+    .lvl-error, .lvl-critical, .lvl-failed { color: #ff7090; }
     .lvl-system { color: #e0e6ed; }
 
-    #ready-banner {
-      display: none;
-      background-color: rgba(0, 232, 150, 0.1);
-      border: 1px solid #00e896;
-      color: #00e896;
-      padding: 20px;
-      border-radius: 8px;
-      text-align: center;
-      margin-bottom: 20px;
-      font-size: 20px;
-      font-weight: bold;
+    @media (max-width: 1180px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      #log-box {
+        height: 380px;
+      }
     }
-    #ready-banner.visible {
-      display: block;
+
+    @media (max-width: 980px) {
+      .shelves-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .devices {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 16px;
+      }
+
+      .header-bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .stages {
+        grid-template-columns: 1fr;
+      }
+
+      .devices {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
   </style>
 </head>
 <body>
 <div class="container">
   <h1>CANopen Commissioning</h1>
-  <p class="subtitle">Simplified debug interface</p>
+  <p class="subtitle">Four shelves with live device slots populated from the network snapshot.</p>
 
-  <div id="ready-banner">
-    🎉 READY FOR PUMPING 🎉
-  </div>
+  <div id="ready-banner">READY FOR PUMPING</div>
 
   <div class="header-bar">
-    <div id="connection-status">SSE Status: Connecting...</div>
+    <div id="connection-status" class="status-pill">SSE Status: Connecting...</div>
     <button id="start-btn" onclick="triggerStart()">Start Commissioning</button>
   </div>
 
@@ -190,60 +451,129 @@
   </div>
 
   <div class="grid">
-    <!-- Left: Devices List -->
     <div class="panel">
-      <h2>Network Devices</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Node ID</th>
-            <th>Serial Number</th>
-            <th>Type</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody id="device-table-body">
-          <tr>
-            <td colspan="4" style="text-align:center; color:#4a6080; padding:20px;">No devices detected yet. Click start.</td>
-          </tr>
-        </tbody>
-      </table>
+      <h2>Network Shelves</h2>
+      <div class="panel-subtitle">Devices are rendered into 4 shelves and updated live as snapshots arrive.</div>
+      <div class="shelves-grid" id="shelves-grid"></div>
     </div>
 
-    <!-- Right: Log output -->
     <div class="panel">
       <h2>Process Output</h2>
+      <div class="panel-subtitle">Live log stream from the automation run.</div>
       <div id="log-box"></div>
     </div>
   </div>
 </div>
 
 <script>
+  const SHELF_COUNT = 4;
+  const SLOTS_PER_SHELF = 12;
+
   let sse = null;
+
   const startBtn = document.getElementById("start-btn");
   const connectionStatus = document.getElementById("connection-status");
   const readyBanner = document.getElementById("ready-banner");
+  const shelvesGrid = document.getElementById("shelves-grid");
+  const selectedSlots = new Set();
+
+  function getSlotId(shelfIndex, slotIndex) {
+    return `shelf-${shelfIndex}-slot-${slotIndex}`;
+  }
+
+  function getShelfCountId(shelfIndex) {
+    return `count-${shelfIndex}`;
+  }
+
+  function normalizeDevice(node, kind) {
+    const state = kind === "boot" ? "BOOT" : String(node.state || "UNKNOWN").toUpperCase();
+    return {
+      kind,
+      serial: node.serial || "N/A",
+      nodeId: node.nodeId ?? null,
+      type: node.type || "Unknown device",
+      state,
+    };
+  }
+
+  function slotKey(shelfIndex, slotIndex) {
+    return `${shelfIndex}-${slotIndex}`;
+  }
+
+  function isSlotSelected(shelfIndex, slotIndex) {
+    return selectedSlots.has(slotKey(shelfIndex, slotIndex));
+  }
+
+  function setSlotSelection(card, shelfIndex, slotIndex, selected) {
+    const key = slotKey(shelfIndex, slotIndex);
+    if (selected) {
+      selectedSlots.add(key);
+    } else {
+      selectedSlots.delete(key);
+    }
+
+    card.classList.toggle("selected", selected);
+    card.setAttribute("aria-pressed", selected ? "true" : "false");
+  }
+
+  function toggleSlotSelection(card) {
+    const shelfIndex = Number(card.dataset.shelf);
+    const slotIndex = Number(card.dataset.slot);
+    setSlotSelection(card, shelfIndex, slotIndex, !isSlotSelected(shelfIndex, slotIndex));
+  }
+
+  function buildShelfMarkup() {
+    let markup = "";
+
+    for (let shelf = 1; shelf <= SHELF_COUNT; shelf++) {
+      markup += `
+        <div class="shelf">
+          <div class="shelf-header">
+            <div class="shelf-title">Shelf ${shelf}</div>
+            <div class="progress"><span id="${getShelfCountId(shelf)}">0</span>/12</div>
+          </div>
+          <div class="devices">
+      `;
+
+      for (let slot = 1; slot <= SLOTS_PER_SHELF; slot++) {
+        markup += `
+          <div class="device empty" id="${getSlotId(shelf, slot)}" data-shelf="${shelf}" data-slot="${slot}" role="button" tabindex="0" aria-pressed="false">
+            <span class="slot-select">✓</span>
+            <div>
+              <div class="device-slot">Slot ${slot}</div>
+              <div class="device-label">Waiting</div>
+            </div>
+            <div class="device-meta">
+              <span class="badge status-unknown">EMPTY</span>
+            </div>
+          </div>
+        `;
+      }
+
+      markup += "</div></div>";
+    }
+
+    shelvesGrid.innerHTML = markup;
+  }
 
   function connectSSE() {
     console.log("[DEBUG] Connecting to Server-Sent Events stream...");
     connectionStatus.textContent = "SSE Status: Connecting...";
-    
-    // Close existing connection if any
+
     if (sse) sse.close();
 
-    // Connect to same host relative path
     sse = new EventSource('/events');
 
     sse.onopen = function() {
       console.log("[DEBUG] SSE connection opened successfully!");
       connectionStatus.textContent = "SSE Status: Connected";
-      connectionStatus.style.color = "#00e896";
+      connectionStatus.style.color = "#75ef9c";
     };
 
     sse.onerror = function(err) {
       console.error("[DEBUG] SSE connection encountered an error:", err);
       connectionStatus.textContent = "SSE Status: Reconnecting...";
-      connectionStatus.style.color = "#ff4d6d";
+      connectionStatus.style.color = "#ff7090";
     };
 
     sse.onmessage = function(e) {
@@ -260,11 +590,23 @@
   function handleServerEvent(ev) {
     if (ev.type === "log") {
       writeLog(ev.level, ev.ts, ev.message);
-    } else if (ev.type === "stage") {
+      return;
+    }
+
+    if (ev.type === "stage") {
       updateStageUI(ev.stage);
-    } else if (ev.type === "snapshot") {
-      updateDeviceTable(ev.bootNodes, ev.canOpenNodes);
-    } else if (ev.type === "done") {
+      return;
+    }
+
+    if (ev.type === "snapshot") {
+      renderShelves({
+        bootNodes: Array.isArray(ev.bootNodes) ? ev.bootNodes : [],
+        canOpenNodes: Array.isArray(ev.canOpenNodes) ? ev.canOpenNodes : [],
+      });
+      return;
+    }
+
+    if (ev.type === "done") {
       if (ev.success) {
         readyBanner.classList.add("visible");
         writeLog("SUCCESS", ev.ts, "Automation finished successfully: READY FOR PUMPING");
@@ -288,40 +630,100 @@
     }
   }
 
-  function updateDeviceTable(bootNodes, canOpenNodes) {
-    console.log("[DEBUG] Updating device table with snapshot data.");
-    const tbody = document.getElementById("device-table-body");
-    tbody.innerHTML = "";
+  function renderShelves(snapshot) {
+    const devices = [
+      ...snapshot.bootNodes.map(node => normalizeDevice(node, "boot")),
+      ...snapshot.canOpenNodes.map(node => normalizeDevice(node, "canopen")),
+    ];
 
-    const totalDevices = bootNodes.length + canOpenNodes.length;
-    if (totalDevices === 0) {
-      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#4a6080; padding:20px;">No devices detected.</td></tr>`;
-      return;
+    const shelfDevicesByShelf = Array.from({ length: SHELF_COUNT }, () => []);
+    let deviceIndex = 0;
+
+    for (let shelf = 0; shelf < SHELF_COUNT; shelf++) {
+      while (deviceIndex < devices.length && shelfDevicesByShelf[shelf].length < SLOTS_PER_SHELF) {
+        shelfDevicesByShelf[shelf].push(devices[deviceIndex]);
+        deviceIndex += 1;
+      }
     }
 
-    // Add boot nodes
-    bootNodes.forEach(node => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td><span class="status-badge status-boot">BOOT</span></td>
-        <td><code>${node.serial}</code></td>
-        <td>${node.type}</td>
-        <td><span class="status-badge status-boot">BOOTMODE</span></td>
-      `;
-      tbody.appendChild(tr);
+    for (let shelf = 1; shelf <= SHELF_COUNT; shelf++) {
+      const shelfDevices = shelfDevicesByShelf[shelf - 1];
+      const countEl = document.getElementById(getShelfCountId(shelf));
+
+      if (countEl) {
+        countEl.innerText = shelfDevices.length;
+      }
+
+      for (let slot = 1; slot <= SLOTS_PER_SHELF; slot++) {
+        const card = document.getElementById(getSlotId(shelf, slot));
+        const device = shelfDevices[slot - 1];
+
+        if (!card) continue;
+
+        const selected = isSlotSelected(shelf, slot);
+
+        if (!device) {
+          card.className = "device empty";
+          if (selected) card.classList.add("selected");
+          card.setAttribute("aria-pressed", selected ? "true" : "false");
+          card.innerHTML = `
+            <span class="slot-select">✓</span>
+            <div>
+              <div class="device-slot">Slot ${slot}</div>
+              <div class="device-label">Waiting</div>
+            </div>
+            <div class="device-meta">
+              <span class="badge status-unknown">EMPTY</span>
+            </div>
+          `;
+          continue;
+        }
+
+        const stateClass = device.kind === "boot"
+          ? "boot"
+          : (device.state === "OPERATIONAL" ? "op" : "preop");
+
+        const stateLabel = device.kind === "boot" ? "BOOT" : device.state;
+        const nodeBadge = device.kind === "boot"
+          ? "BOOT MODE"
+          : (device.nodeId != null ? `NODE ${device.nodeId}` : "NODE N/A");
+
+        card.className = `device assigned ${stateClass}`;
+        if (selected) card.classList.add("selected");
+        card.setAttribute("aria-pressed", selected ? "true" : "false");
+        card.innerHTML = `
+          <span class="slot-select">✓</span>
+          <div>
+            <div class="device-slot">Slot ${slot}</div>
+            <div class="device-label">${device.serial}</div>
+          </div>
+          <div class="device-meta">
+            <span class="badge ${device.kind === "boot" ? "status-boot" : (device.state === "OPERATIONAL" ? "status-op" : "status-preop")}">${stateLabel}</span>
+            <span class="badge status-unknown">${nodeBadge}</span>
+            <span class="badge status-unknown">${device.type}</span>
+          </div>
+        `;
+      }
+    }
+
+    if (deviceIndex < devices.length) {
+      writeLog("WARNING", new Date().toTimeString().slice(0, 8), `Snapshot contains ${devices.length - deviceIndex} devices more than the available shelf slots.`);
+    }
+  }
+
+  function attachSlotSelectionHandlers() {
+    shelvesGrid.addEventListener("click", (event) => {
+      const card = event.target.closest(".device");
+      if (!card) return;
+      toggleSlotSelection(card);
     });
 
-    // Add configured canopen nodes
-    canOpenNodes.forEach(node => {
-      const tr = document.createElement("tr");
-      const stateClass = node.state === "OPERATIONAL" ? "status-op" : "status-preop";
-      tr.innerHTML = `
-        <td><strong>#${node.nodeId}</strong></td>
-        <td><code>${node.serial}</code></td>
-        <td>${node.type}</td>
-        <td><span class="status-badge ${stateClass}">${node.state}</span></td>
-      `;
-      tbody.appendChild(tr);
+    shelvesGrid.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      const card = event.target.closest(".device");
+      if (!card) return;
+      event.preventDefault();
+      toggleSlotSelection(card);
     });
   }
 
@@ -343,41 +745,43 @@
     startBtn.disabled = true;
     startBtn.textContent = "Running...";
     readyBanner.classList.remove("visible");
-    
-    // Clear log box
+
     document.getElementById("log-box").innerHTML = "";
-    
-    // Reset Stages
+
     for (let i = 0; i <= 2; i++) {
       const el = document.getElementById(`stage-${i}`);
       if (el) el.className = "stage";
     }
 
+    renderShelves({ bootNodes: [], canOpenNodes: [] });
+
     try {
-      // POST request to trigger the python automation thread
       console.log("[DEBUG] Fetching POST /api/start...");
       const response = await fetch('/api/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
+
       console.log("[DEBUG] /api/start response status:", response.status);
       const data = await response.json();
       console.log("[DEBUG] /api/start response data:", data);
 
       if (!response.ok) {
-        writeLog("ERROR", new Date().toTimeString().slice(0,8), "Failed to start: " + (data.status || response.statusText));
+        writeLog("ERROR", new Date().toTimeString().slice(0, 8), "Failed to start: " + (data.status || response.statusText));
         startBtn.disabled = false;
         startBtn.textContent = "Start Commissioning";
       }
     } catch (err) {
       console.error("[DEBUG] Network error calling /api/start:", err);
-      writeLog("ERROR", new Date().toTimeString().slice(0,8), "Network error connecting to backend: " + err.message);
+      writeLog("ERROR", new Date().toTimeString().slice(0, 8), "Network error connecting to backend: " + err.message);
       startBtn.disabled = false;
       startBtn.textContent = "Start Commissioning";
     }
   }
 
-  // Connect on load
+  buildShelfMarkup();
+  attachSlotSelectionHandlers();
+  renderShelves({ bootNodes: [], canOpenNodes: [] });
   connectSSE();
 </script>
 </body>
